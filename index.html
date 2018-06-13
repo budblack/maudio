@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CXT.Audio</title>
+
+    <script src="./bundle.js"></script>
+    <script src="https://cdn.bootcss.com/babel-standalone/7.0.0-beta.3/babel.min.js"></script>
+    <script src="https://cdn.bootcss.com/vue/2.5.17-beta.0/vue.min.js"></script>
+    <script src="https://cdn.bootcss.com/vConsole/3.2.0/vconsole.min.js"></script>
+    <script src="https://cdn.bootcss.com/element-ui/2.4.0/index.js"></script>
+    <link href="https://cdn.bootcss.com/element-ui/2.4.0/theme-chalk/index.css" rel="stylesheet">
+    <script src="js/vue-echarts.js"></script>
+
+    <style>
+        .echarts {
+            height: 300px;
+            width: 100%;
+        }
+    </style>
+
+    <script type="text/babel">
+      new VConsole();
+    </script>
+</head>
+<body>
+<div id="app">
+    <span>{{app_meta}}</span>
+    <chart :options="chart_rhythm_source"></chart>
+    <chart :options="chart_rhythm_mic"></chart>
+    <!--<chart :options="chart_sub "></chart>-->
+    <!--<chart :options="chart_frequency_source"></chart>-->
+    <!--<chart :options="chart_frequency_mic"></chart>-->
+</div>
+<script>
+  const LEN_CHART = 128;
+  Vue.component('chart', VueECharts);
+  window['app'] = new Vue(
+      {
+        el  : '#app',
+        data: function () {
+          let data = [];
+
+          for (let i = 0 ; i <= 360 ; i++) {
+            let t = i / 180 * Math.PI;
+            let r = Math.sin(2 * t) * Math.cos(2 * t);
+            data.push([r, i]);
+          }
+
+          return {
+            app_meta: 'MAudio.',
+            arr_sub : [0, 0, 0, 0, 0],
+
+            chart_sub          : {
+              title : {
+                text: '频谱差异图',
+                left: 10
+              },
+              xAxis : {
+                data: new Array(LEN_CHART)
+              },
+              yAxis : {
+                min: 0,
+                max: 256
+              },
+              series: [
+                {
+                  type: 'line',
+                  data: new Array(LEN_CHART)
+                }
+              ]
+            },
+            chart_rhythm_source: {
+              title : {
+                text: '原曲节奏',
+                left: 10
+              },
+              xAxis : {
+                data: new Array(LEN_CHART)
+              },
+              yAxis : {
+                min: 0,
+                max: 'dataMax'
+              },
+              series: [
+                {
+                  type: 'line',
+                  symbol:'none',
+                  smooth:true,
+                  data: (
+                      new Array(LEN_CHART)
+                  ).fill(0)
+                }
+              ]
+            },
+            chart_rhythm_mic   : {
+              title : {
+                text: '演唱节奏',
+                left: 10
+              },
+              xAxis : {
+                data: new Array(LEN_CHART)
+              },
+              yAxis : {
+                min: 0,
+                max: 'dataMax'
+              },
+              series: [
+                {
+                  type: 'line',
+                  symbol:'none',
+                  smooth:true,
+                  data: (
+                      new Array(LEN_CHART)
+                  ).fill(0)
+                }
+              ]
+            },
+
+            chart_waveform_sources   : {
+              title : {
+                text: '波形图',
+                left: 10
+              },
+              xAxis : {
+                data: []
+              },
+              yAxis : {
+                min: -128,
+                max: 128
+              },
+              series: [
+                {
+                  type: 'line',
+                  data: []
+                }
+              ]
+            },
+            chart_waveform_microphone: {
+              title : {
+                text: '波形图',
+                left: 10
+              },
+              xAxis : {
+                data     : [],
+                silent   : false,
+                splitLine: {
+                  show: false
+                },
+                splitArea: {
+                  show: false
+                }
+              },
+              yAxis : {
+                min      : 'dataMin',
+                max      : 'dataMax',
+                splitArea: {
+                  show: false
+                }
+              },
+              series: [
+                {
+                  type : 'line',
+                  data : [],
+                  large: true
+                }
+              ]
+            },
+
+            chart_frequency_source: {
+              title : {
+                text: '频谱',
+                left: 10
+              },
+              xAxis : {
+                data: []
+              },
+              yAxis : {
+                min: 0,
+                max: 256
+              },
+              series: [
+                {
+                  type: 'bar',
+                  data: []
+                }
+              ]
+            },
+            chart_frequency_mic   : {
+              title : {
+                text: 'MIC.频谱',
+                left: 10
+              },
+              xAxis : {
+                data: []
+              },
+              yAxis : {
+                min: 0,
+                max: 256
+              },
+              series: [
+                {
+                  type: 'bar',
+                  data: []
+                }
+              ]
+            }
+          };
+        },
+        async mounted () {
+          let ctx_audio = new msign.OTDEVCXTAudio(),
+              audio_url = '/music/4051232534.mp3';
+
+          const CHART_WAVEFORM_LENGHT = 2560 * 2;
+          try {
+            await ctx_audio.load(audio_url);
+          } catch (e) {
+            console.error(e);
+          }
+          let time_start = Date.now();
+          ctx_audio.on(
+              'update',
+              (data) => {
+                // console.log(data);
+                let {
+                      buf_uint_frequency_source,
+                      buf_uint_timedomain_source,
+                      buf_uint_timedomain_mic,
+                      buf_uint_frequency_mic
+                    }                   = data;
+                let chart_rhythm_source = window['app']['chart_rhythm_source'];
+                let chart_rhythm_mic    = window['app']['chart_rhythm_mic'];
+
+                /*****************************************************************
+                 *          原曲节奏
+                 *****************************************************************/
+                chart_rhythm_source.xAxis.data.push(Date.now() - time_start);
+                chart_rhythm_source.series[0].data.push(
+                    buf_uint_timedomain_source.reduce((p, c) => {
+                      c = Math.abs(c - 128);
+                      return c + p;
+                    }) / buf_uint_timedomain_source.length
+                );
+                if (chart_rhythm_source.series[0].data.length > LEN_CHART) {
+                  chart_rhythm_source.xAxis.data.shift();
+                  chart_rhythm_source.series[0].data.shift();
+                }
+                /*****************************************************************
+                 *          演唱节奏
+                 *****************************************************************/
+                chart_rhythm_mic.xAxis.data.push(Date.now() - time_start);
+                chart_rhythm_mic.series[0].data.push(
+                    buf_uint_timedomain_mic.reduce((p, c) => {
+                      c = Math.abs(c - 128);
+                      return c + p;
+                    }) / buf_uint_timedomain_mic.length
+                );
+                if (chart_rhythm_mic.series[0].data.length > LEN_CHART) {
+                  chart_rhythm_mic.xAxis.data.shift();
+                  chart_rhythm_mic.series[0].data.shift();
+                }
+
+                // chart_sub.series[0].data             = Array.from(buf_out);
+                // buf_out.forEach((n, i) => {
+                //   this.arr_sub[i] = n;
+                // });
+                // this.arr_sub.push(0)
+
+                // console.log( this.arr_sub)
+
+                // console.log(buf_out);
+              }
+          );
+
+          ctx_audio.play();
+          // ctx_audio.play_human_only();
+          window['ca'] = ctx_audio;
+        }
+      }
+  );
+</script>
+</body>
+</html>
